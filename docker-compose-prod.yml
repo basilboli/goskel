@@ -1,0 +1,25 @@
+version: '3.1'
+services:
+  goskel:
+    image: ghcr.io/basilboli/goskel:${VERSION}
+    ports:
+      - 3003:8080
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - MODE=production
+      - DB_NAME=goskel
+      - AWS_ACCESS_KEY_ID=XXXX
+      - AWS_SECRET_ACCESS_KEY=XXXXXX
+    secrets:
+      - key_file
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname != dev0
+
+secrets:
+  key_file:
+    external: true

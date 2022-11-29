@@ -1,0 +1,61 @@
+version: '2'
+
+services:
+    goskel:
+        build:
+          context: .
+          dockerfile: Dockerfile.test
+
+        logging:
+          driver: json-file
+          options:
+              max-size: "10m"
+              max-file: "5"
+        volumes:
+            - ./test/ssh/id_rsa:/run/secrets/key_file:ro
+        environment:
+            - MONGO_URI=mongodb://mongo:27017
+            - DB_NAME=goskel-test
+            - MODE=testing
+        depends_on:
+          - mongo
+          - sftp
+        networks:
+          -  integration-tests-goskel-net
+
+    mongo:
+      image: mongo:3.4
+      ports:
+        - 27018:27017
+      hostname: mongo
+      container_name: mongo
+      environment:
+        SECRET: secret
+      restart: on-failure
+      networks:
+        - integration-tests-goskel-net
+
+    mongo_seed:
+      image: mongo:3.4
+      links:
+      - mongo
+      volumes:
+      - ./mongo-seed:/mongo-seed
+      command: ["./mongo-seed/wait-for-it.sh", "mongo:27017", "--", "/mongo-seed/import.sh"]
+      networks:
+          - integration-tests-goskel-net
+
+    sftp:
+        image: atmoz/sftp
+        hostname: sftp
+        container_name: sftp
+        volumes:
+            - ./host/upload:/home/foo/upload
+            - ./test/ssh/id_rsa.pub:/home/foo/.ssh/keys/id_rsa.pub:ro
+        command: foo::1001
+        networks:
+            - integration-tests-goskel-net
+
+networks:
+  integration-tests-goskel-net:
+    driver: bridge

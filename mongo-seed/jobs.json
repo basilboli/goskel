@@ -1,0 +1,9 @@
+[
+  {
+    "addr": "sftp:22",
+    "uuid": "404dab5e-fcef-4d51-a48f-43d316e094a4",
+    "user": "foo",
+    "path": "upload",
+    "keyPath": "/run/secrets/key_file"
+  }
+]

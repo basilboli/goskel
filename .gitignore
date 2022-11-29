@@ -1,0 +1,15 @@
+tags
+*.cov
+.cover
+cover.out
+target
+*.xls
+*.xlsx
+*.bdb
+var/
+bin/
+.vscode/
+.idea/
+*.env
+host/upload
+.DS_Store

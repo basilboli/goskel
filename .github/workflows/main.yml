@@ -1,0 +1,97 @@
+
+# This workflow will build a docker container, publish it to GitHub Container Registry.
+#
+# To configure this workflow:
+# 1. Set up secrets in your workspace:
+
+# MONGO_URI - mongo connection string
+# REGISTRY_URL - github container registry url
+# REGISTRY_USER - github container registry username
+# REGISTRY_PWD - github container registry password
+# ADMIN_TOKEN - admin token for protected endpoints
+
+name: deploy
+
+on:
+  # Trigger the workflow on push or pull request,
+  # but only for the master branch
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+# Environment variables available to all jobs and steps in this workflow
+env:
+  MONGO_URI: ${{ secrets.MONGO_URI }}
+  REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
+  REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+  REGISTRY_PWD: ${{ secrets.REGISTRY_PWD }}
+  GITHUB_SHA: ${{ github.sha }}
+  ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+  IMAGE: ghcr.io/basilboli/goskel
+
+jobs:
+  setup-test-build-publish-deploy:
+    name: Setup, Test, Build, Publish, and Deploy
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@master
+
+    # Configure docker private registry
+    - run: |
+        # Set up docker to authenticate against private registry
+        docker login -u $REGISTRY_USER -p $REGISTRY_PWD https://$REGISTRY_URL
+
+    # Run integration tests
+    - name: Test
+      run: |
+        docker-compose -f docker-compose.test.yml down -v
+        docker-compose -f docker-compose.test.yml build
+        docker-compose -f docker-compose.test.yml up --abort-on-container-exit --force-recreate
+        docker-compose -f docker-compose.test.yml down -v
+
+    - name: Build
+      run: |
+        docker build --file Dockerfile -t $REGISTRY_URL/$IMAGE:$GITHUB_SHA \
+          --build-arg COMMIT_HASH="$GITHUB_SHA" \
+          --build-arg BUILD_TIME="$(date +%Y%m%d_%H%M%S)" .
+
+    # Push the Docker image to Google Container Registry
+    - name: Publish
+      if: github.event_name == 'push'
+      run: |
+        docker push $REGISTRY_URL/$IMAGE:$GITHUB_SHA
+
+    # Configure prod environment
+    - name: Prepare env file
+      if: github.event_name == 'push'
+      run: |
+        echo "export VERSION=\"$GITHUB_SHA\"" > .env
+        echo "export MONGO_URI=\"$MONGO_URI\"" >> .env
+        echo "export ADMIN_TOKEN=\"$ADMIN_TOKEN\"" >> .env
+        echo "export DB_NAME=\"$DB_NAME\"" >> .env
+
+      # Deploy the Docker image to private Docker Swarm cluster
+    - name: Copy artifacts via ssh
+      if: github.event_name == 'push'
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.DEPLOY_HOST_PROD }}
+        username: ${{ secrets.DEPLOY_HOST_USER }}
+        key: ${{ secrets.DEPLOY_HOST_KEY }}
+        source: ".env,docker-compose-prod.yml,run-stack.sh,stop-stack.sh"
+        target: "/home/goskel"
+
+    # Run new version
+    - name: Run new version on Docker Swarm cluster
+      if: github.event_name == 'push'
+      uses: garygrossgarten/github-action-ssh@release
+      with:
+        command: ./run-stack.sh
+        host: ${{ secrets.DEPLOY_HOST_PROD }}
+        username: ${{ secrets.DEPLOY_HOST_USER}}
+        privateKey: ${{ secrets.DEPLOY_HOST_KEY}}

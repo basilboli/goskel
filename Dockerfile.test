@@ -1,0 +1,9 @@
+FROM golang:1.13.0-alpine
+
+# Set working directory
+WORKDIR /go/src/goskel
+
+COPY . /go/src/goskel
+
+# Run tests
+CMD CGO_ENABLED=0 go test -mod vendor -v ./...
